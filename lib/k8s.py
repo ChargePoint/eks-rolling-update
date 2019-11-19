@@ -6,13 +6,26 @@ import sys
 from lib.logger import logger
 from config import app_config
 
+_K8S_API_CLIENT_ = None
+
+def get_k8s_api_client():
+    """
+    Returns an initialized module-global instance of k8s api client
+    """
+    global _K8S_API_CLIENT_
+    if _K8S_API_CLIENT_ is None:
+        config.load_kube_config()
+        configuration = client.Configuration()
+        if app_config['HTTPS_PROXY']:
+            configuration.proxy = app_config['HTTPS_PROXY']
+        _K8S_API_CLIENT_ = client.ApiClient(configuration)
+    return _K8S_API_CLIENT_
 
 def get_k8s_nodes(exclude_node_label_key=app_config["EXCLUDE_NODE_LABEL_KEY"]):
     """
     Returns a list of kubernetes nodes
     """
-    config.load_kube_config()
-    k8s_api = client.CoreV1Api()
+    k8s_api = client.CoreV1Api(get_k8s_api_client())
     logger.info("Getting k8s nodes...")
     response = k8s_api.list_node()
     if exclude_node_label_key is not None:
@@ -46,12 +59,7 @@ def modify_k8s_autoscaler(action):
     """
     Pauses or resumes the Kubernetes autoscaler
     """
-    import kubernetes.client
-    config.load_kube_config()
-    # Configure API key authorization: BearerToken
-    configuration = kubernetes.client.Configuration()
-    # create an instance of the API class
-    k8s_api = kubernetes.client.AppsV1Api(kubernetes.client.ApiClient(configuration))
+    k8s_api = client.AppsV1Api(get_k8s_api_client())
     if action == 'pause':
         logger.info('Pausing k8s autoscaler...')
         body = {'spec': {'replicas': 0}}
@@ -77,11 +85,7 @@ def delete_node(node_name):
     """
     Deletes a kubernetes node from the cluster
     """
-    import kubernetes.client
-    config.load_kube_config()
-    configuration = kubernetes.client.Configuration()
-    # create an instance of the API class
-    k8s_api = kubernetes.client.CoreV1Api(kubernetes.client.ApiClient(configuration))
+    k8s_api = client.CoreV1Api(get_k8s_api_client())
     logger.info("Deleting k8s node {}...".format(node_name))
     try:
         if not app_config['DRY_RUN']:
@@ -97,11 +101,7 @@ def cordon_node(node_name):
     """
     Cordon a kubernetes node to avoid new pods being scheduled on it
     """
-    import kubernetes.client
-    config.load_kube_config()
-    configuration = kubernetes.client.Configuration()
-    # create an instance of the API class
-    k8s_api = kubernetes.client.CoreV1Api(kubernetes.client.ApiClient(configuration))
+    k8s_api = client.CoreV1Api(get_k8s_api_client())
     logger.info("Cordoning k8s node {}...".format(node_name))
     try:
         api_call_body = client.V1Node(spec=client.V1NodeSpec(unschedulable=True))
